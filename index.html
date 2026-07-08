@@ -125,6 +125,17 @@
         font-weight: 700;
       }
 
+      #media-sink {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0.01;
+        pointer-events: none;
+      }
+
       .preview-grid {
         display: grid;
         grid-template-columns: minmax(220px, 256px) 1fr;
@@ -173,11 +184,13 @@
         <h2>Probe Rules</h2>
         <dl>
           <dt>project strict</dt>
-          <dd>first attempt only: platform target video, 1500ms loadeddata timeout, immediate WebGL sample</dd>
+          <dd>first attempt only: platform target video, loadeddata timeout, immediate WebGL sample</dd>
           <dt>diagnostic attempts</dt>
           <dd>immediate, requestVideoFrameCallback/fallback, seek second frame, seek second frame + callback/fallback</dd>
           <dt>success condition</dt>
           <dd>same as project: alpha <= 16 and alpha >= 240 must both exist</dd>
+          <dt>load timeout</dt>
+          <dd id="load-timeout-label">1500ms</dd>
           <dt>video source</dt>
           <dd id="video-source-label">short base64 probe</dd>
         </dl>
@@ -226,6 +239,7 @@
 
       <h2>Result JSON</h2>
       <pre id="output">{}</pre>
+      <div id="media-sink" aria-hidden="true"></div>
     </main>
 
     <script>
@@ -263,6 +277,7 @@
       };
 
       const $ = (id) => document.getElementById(id);
+      $("load-timeout-label").textContent = `${getLoadTimeoutMs()}ms`;
       $("video-source-label").textContent = getVideoSourceConfig().description;
       $("preview-source").textContent = getVideoSourceConfig().label;
 
@@ -359,6 +374,10 @@
         }
       }
 
+      function getLoadTimeoutMs() {
+        return VIDEO_SOURCE === "ios-hevc-file" ? 5000 : PROBE_TIMEOUT_MS;
+      }
+
       function revokeBlobUrl(blobUrl) {
         try {
           if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
@@ -409,7 +428,7 @@
           const handleLoaded = () => settle(() => resolve());
           const handleError = () => settle(() => reject(new Error("load-error")));
 
-          timeoutTimer = setTimeout(() => settle(() => reject(new Error("timeout"))), PROBE_TIMEOUT_MS);
+          timeoutTimer = setTimeout(() => settle(() => reject(new Error("timeout"))), getLoadTimeoutMs());
           video.addEventListener("loadeddata", handleLoaded, { once: true });
           video.addEventListener("error", handleError, { once: true });
           video.load();
@@ -430,8 +449,30 @@
         video.loop = Boolean(options && options.loop);
         video.preload = "auto";
         video.src = src;
+        $("media-sink").appendChild(video);
 
         return { video, blobUrl };
+      }
+
+      function cleanupProbeVideo(probeVideo) {
+        if (!probeVideo) return;
+        try {
+          probeVideo.video.pause();
+        } catch (_err) {
+          // Ignore media cleanup failures.
+        }
+        try {
+          probeVideo.video.removeAttribute("src");
+          probeVideo.video.load();
+        } catch (_err) {
+          // Ignore media cleanup failures.
+        }
+        try {
+          probeVideo.video.remove();
+        } catch (_err) {
+          // Ignore media cleanup failures.
+        }
+        if (probeVideo.blobUrl) revokeBlobUrl(probeVideo.blobUrl);
       }
 
       async function loadProbeVideo() {
@@ -443,7 +484,7 @@
           await waitForVideoLoaded(probeVideo.video);
           return probeVideo;
         } catch (err) {
-          if (probeVideo.blobUrl) revokeBlobUrl(probeVideo.blobUrl);
+          cleanupProbeVideo(probeVideo);
           throw err;
         }
       }
@@ -672,14 +713,7 @@
 
       function stopWebGLPreview() {
         if (previewState.animationFrame) cancelAnimationFrame(previewState.animationFrame);
-        if (previewState.video) {
-          try {
-            previewState.video.pause();
-          } catch (_err) {
-            // Ignore preview cleanup failures.
-          }
-        }
-        if (previewState.blobUrl) revokeBlobUrl(previewState.blobUrl);
+        if (previewState.video) cleanupProbeVideo({ video: previewState.video, blobUrl: previewState.blobUrl });
         previewState = {
           animationFrame: 0,
           blobUrl: null,
@@ -810,9 +844,10 @@
 
       async function probeAlphaWithAttempts() {
         let blobUrl = null;
+        let probeVideo = null;
 
         try {
-          const probeVideo = await loadProbeVideo();
+          probeVideo = await loadProbeVideo();
           const video = probeVideo.video;
           blobUrl = probeVideo.blobUrl;
 
@@ -862,7 +897,8 @@
             message: String(err && err.message ? err.message : err),
           };
         } finally {
-          if (blobUrl) revokeBlobUrl(blobUrl);
+          if (probeVideo) cleanupProbeVideo(probeVideo);
+          else if (blobUrl) revokeBlobUrl(blobUrl);
         }
       }
 
