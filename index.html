@@ -140,6 +140,8 @@
           <dd>immediate, requestVideoFrameCallback/fallback, seek second frame, seek second frame + callback/fallback</dd>
           <dt>success condition</dt>
           <dd>same as project: alpha <= 16 and alpha >= 240 must both exist</dd>
+          <dt>video source</dt>
+          <dd id="video-source-label">short base64 probe</dd>
         </dl>
       </section>
 
@@ -178,12 +180,16 @@
       const FRAME_WAIT_MS = 120;
       const SEEK_TIMEOUT_MS = 800;
       const WEBM_ALPHA_MIME_TYPE = "video/webm";
+      const LONG_WEBM_URL = "assets/long-alpha-probe.webm";
+      const VIDEO_SOURCE = new URLSearchParams(window.location.search).get("video") === "long" ? "long-webm-file" : "short-base64";
       const WEBM_ALPHA_PROBE_BASE64 =
         "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAAANdEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEnTbuMU6uEHFO7a1OsggNH7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjIuMy4xMDBXQYxMYXZmNjIuMy4xMDBEiYhAj0AAAAAAABZUrmvMrgEAAAAAAABD14EBc8WIlVjCI5gwStOcgQAitZyDdW5kiIEAhoVWX1ZQOYOBASPjg4QdzWUA4JSwgUC6gUCagQJTwIEBVbCEVbmBARJUw2dAk3Nzn2PAgGfImUWjh0VOQ09ERVJEh4xMYXZmNjIuMy4xMDBzc+5jwItjxYiVWMIjmDBK02fIpUWjh0VOQ09ERVJEh5hMYXZjNjIuMTEuMTAwIGxpYnZweC12cDlnyJFFo4pBTFBIQV9NT0RFRIeBMWfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDEuMDAwMDAwMDAwAB9DtnVBgeeBAKBBSaFBAIEAAACCSYNCAAPwA/YAOCQcGAAAAfB/N9HX0jv/35vYvYt4/W+s/H8LRfbvIvI/38m2jAAAeLby2NnCtf5ID05IxhPMTtEQKe5TOmA2uQ7oxV9+MtaT7n73ue4E/Fz1MhjgJHPbdq/SrgTyVKBnuzIYt6ffv+micgTHnxNp51beEL93Kd/zb697ik7C/3Tp8Nv1Hlm9pWEEP4FOtD4NgoUctJ+3rWvad0WsylD1EB+zoQK8sZyj3M11eOvS2mjfRSv/59nSSkZzuUwmetQZ9YlCfU7a3T+Ou2gTLu/w92djATZlGApr1Y9PlubQcZQqBrK5ST0Dwv7hte8Fecyv8yB1ocOmwe6BAaW8gkmDQgAD8AP2ADgkHBgAAACAfY/47KkAAAB4tnD6D7+374BWTHwfg3T7msev7YybQb0/BQ9CA6k2k4DwoLChkoEB9ACGAECSnABAAAACAABUcHWhlaaT7oEBpY6GAECSnABAAAACAABUcPuC/gwcU7trkbuPs4EAt4r3gQHxggHA8IED";
 
       let lastResult = null;
 
       const $ = (id) => document.getElementById(id);
+      $("video-source-label").textContent =
+        VIDEO_SOURCE === "long-webm-file" ? "long WebM file: 5s / 10fps / 50 frames / 128x128" : "short base64 probe: 1s / 2fps / 2 frames / 64x64";
 
       function matchValue(text, regexp) {
         try {
@@ -216,6 +222,7 @@
           myweb: matchValue(ua, /MYWeb\/([\d.]+)/),
           chrome: matchValue(ua, /Chrome\/([\d.]+)/),
           channel: matchValue(ua, /ChannelId\((\d+)\)/),
+          videoSource: VIDEO_SOURCE,
         };
       }
 
@@ -293,8 +300,9 @@
       async function loadWebmProbeVideo() {
         if (typeof document === "undefined") throw new Error("unsupported-api");
 
-        const blobUrl = base64ToBlobUrl(WEBM_ALPHA_PROBE_BASE64, WEBM_ALPHA_MIME_TYPE);
-        if (!blobUrl) throw new Error("unsupported-api");
+        let blobUrl = null;
+        const src = VIDEO_SOURCE === "long-webm-file" ? LONG_WEBM_URL : (blobUrl = base64ToBlobUrl(WEBM_ALPHA_PROBE_BASE64, WEBM_ALPHA_MIME_TYPE));
+        if (!src) throw new Error("unsupported-api");
 
         const video = document.createElement("video");
         video.muted = true;
@@ -302,13 +310,13 @@
         video.playsInline = true;
         video.setAttribute("playsinline", "");
         video.preload = "auto";
-        video.src = blobUrl;
+        video.src = src;
 
         try {
           await waitForVideoLoaded(video);
           return { video, blobUrl };
         } catch (err) {
-          revokeBlobUrl(blobUrl);
+          if (blobUrl) revokeBlobUrl(blobUrl);
           throw err;
         }
       }
@@ -578,6 +586,21 @@
           const secondFrameWait = await waitForVideoFrameOrDelay(video, FRAME_WAIT_MS);
           attempts.push(sample(video, "seek-second-frame-after-frame-wait", { wait: secondFrameWait }));
 
+          if (VIDEO_SOURCE === "long-webm-file") {
+            const extraTargets = [
+              { stage: "seek-mid-frame", time: Math.min(Math.max(duration / 2, 0.5), Math.max(duration - 0.1, 0)) },
+              { stage: "seek-end-frame", time: Math.max(duration - 0.1, 0) },
+            ];
+
+            for (const target of extraTargets) {
+              if (Math.abs(target.time - secondFrameTime) < 0.05) continue;
+              const extraSeek = await seekVideo(video, target.time);
+              attempts.push(sample(video, `${target.stage}-immediate`, { seek: extraSeek }));
+              const extraWait = await waitForVideoFrameOrDelay(video, FRAME_WAIT_MS);
+              attempts.push(sample(video, `${target.stage}-after-frame-wait`, { wait: extraWait }));
+            }
+          }
+
           return {
             result: attempts.some((attempt) => attempt.result === "supported") ? "supported" : attempts[0].result,
             projectStrictResult: attempts[0].result,
@@ -608,6 +631,7 @@
           webmAlphaSupport: "skipped",
           diagnosticSupport: "skipped",
           firstSupportedStage: "none",
+          videoSource: VIDEO_SOURCE,
           attempts: [],
         };
 
@@ -664,6 +688,7 @@
           const support = await reportNativeTransparentVideoSupport();
           const result = {
             mode: "project-strict-plus-multi-attempt",
+            videoSource: VIDEO_SOURCE,
             time: new Date().toISOString(),
             durationMs: Date.now() - startTime,
             env,
