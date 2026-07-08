@@ -124,6 +124,44 @@
         color: #101418;
         font-weight: 700;
       }
+
+      .preview-grid {
+        display: grid;
+        grid-template-columns: minmax(220px, 256px) 1fr;
+        gap: 14px;
+        align-items: start;
+      }
+
+      .checker {
+        width: 256px;
+        max-width: 100%;
+        aspect-ratio: 1;
+        background:
+          linear-gradient(45deg, #4a5560 25%, transparent 25%),
+          linear-gradient(-45deg, #4a5560 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #4a5560 75%),
+          linear-gradient(-45deg, transparent 75%, #4a5560 75%);
+        background-color: #111820;
+        background-position:
+          0 0,
+          0 12px,
+          12px -12px,
+          -12px 0;
+        background-size: 24px 24px;
+      }
+
+      #webgl-preview {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 1px solid #415160;
+      }
+
+      @media (max-width: 640px) {
+        .preview-grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
@@ -148,6 +186,22 @@
       <section>
         <h2>Environment</h2>
         <dl id="env"></dl>
+      </section>
+
+      <section>
+        <h2>WebGL Preview</h2>
+        <div class="preview-grid">
+          <div class="checker">
+            <canvas id="webgl-preview" width="256" height="256"></canvas>
+          </div>
+          <dl>
+            <dt>preview status</dt>
+            <dd id="preview-status">waiting</dd>
+            <dt>source</dt>
+            <dd id="preview-source">unknown</dd>
+          </dl>
+        </div>
+        <button id="preview-run">Restart preview</button>
       </section>
 
       <section>
@@ -186,10 +240,17 @@
         "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAAANdEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEnTbuMU6uEHFO7a1OsggNH7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjIuMy4xMDBXQYxMYXZmNjIuMy4xMDBEiYhAj0AAAAAAABZUrmvMrgEAAAAAAABD14EBc8WIlVjCI5gwStOcgQAitZyDdW5kiIEAhoVWX1ZQOYOBASPjg4QdzWUA4JSwgUC6gUCagQJTwIEBVbCEVbmBARJUw2dAk3Nzn2PAgGfImUWjh0VOQ09ERVJEh4xMYXZmNjIuMy4xMDBzc+5jwItjxYiVWMIjmDBK02fIpUWjh0VOQ09ERVJEh5hMYXZjNjIuMTEuMTAwIGxpYnZweC12cDlnyJFFo4pBTFBIQV9NT0RFRIeBMWfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDEuMDAwMDAwMDAwAB9DtnVBgeeBAKBBSaFBAIEAAACCSYNCAAPwA/YAOCQcGAAAAfB/N9HX0jv/35vYvYt4/W+s/H8LRfbvIvI/38m2jAAAeLby2NnCtf5ID05IxhPMTtEQKe5TOmA2uQ7oxV9+MtaT7n73ue4E/Fz1MhjgJHPbdq/SrgTyVKBnuzIYt6ffv+micgTHnxNp51beEL93Kd/zb697ik7C/3Tp8Nv1Hlm9pWEEP4FOtD4NgoUctJ+3rWvad0WsylD1EB+zoQK8sZyj3M11eOvS2mjfRSv/59nSSkZzuUwmetQZ9YlCfU7a3T+Ou2gTLu/w92djATZlGApr1Y9PlubQcZQqBrK5ST0Dwv7hte8Fecyv8yB1ocOmwe6BAaW8gkmDQgAD8AP2ADgkHBgAAACAfY/47KkAAAB4tnD6D7+374BWTHwfg3T7msev7YybQb0/BQ9CA6k2k4DwoLChkoEB9ACGAECSnABAAAACAABUcHWhlaaT7oEBpY6GAECSnABAAAACAABUcPuC/gwcU7trkbuPs4EAt4r3gQHxggHA8IED";
 
       let lastResult = null;
+      let previewState = {
+        animationFrame: 0,
+        blobUrl: null,
+        renderer: null,
+        video: null,
+      };
 
       const $ = (id) => document.getElementById(id);
       $("video-source-label").textContent =
         VIDEO_SOURCE === "long-webm-file" ? "long WebM file: 5s / 10fps / 50 frames / 128x128" : "short base64 probe: 1s / 2fps / 2 frames / 64x64";
+      $("preview-source").textContent = VIDEO_SOURCE === "long-webm-file" ? LONG_WEBM_URL : "short base64 probe";
 
       function matchValue(text, regexp) {
         try {
@@ -297,9 +358,7 @@
         });
       }
 
-      async function loadWebmProbeVideo() {
-        if (typeof document === "undefined") throw new Error("unsupported-api");
-
+      function createProbeVideoElement(options) {
         let blobUrl = null;
         const src = VIDEO_SOURCE === "long-webm-file" ? LONG_WEBM_URL : (blobUrl = base64ToBlobUrl(WEBM_ALPHA_PROBE_BASE64, WEBM_ALPHA_MIME_TYPE));
         if (!src) throw new Error("unsupported-api");
@@ -309,14 +368,23 @@
         video.defaultMuted = true;
         video.playsInline = true;
         video.setAttribute("playsinline", "");
+        video.loop = Boolean(options && options.loop);
         video.preload = "auto";
         video.src = src;
 
+        return { video, blobUrl };
+      }
+
+      async function loadWebmProbeVideo() {
+        if (typeof document === "undefined") throw new Error("unsupported-api");
+
+        const probeVideo = createProbeVideoElement({ loop: false });
+
         try {
-          await waitForVideoLoaded(video);
-          return { video, blobUrl };
+          await waitForVideoLoaded(probeVideo.video);
+          return probeVideo;
         } catch (err) {
-          if (blobUrl) revokeBlobUrl(blobUrl);
+          if (probeVideo.blobUrl) revokeBlobUrl(probeVideo.blobUrl);
           throw err;
         }
       }
@@ -480,6 +548,123 @@
           } catch (_err) {
             // Ignore WebGL cleanup failures.
           }
+        }
+      }
+
+      function createWebGLPreviewRenderer(canvas) {
+        const gl =
+          canvas.getContext("webgl", {
+            alpha: true,
+            premultipliedAlpha: false,
+            preserveDrawingBuffer: false,
+          }) ||
+          canvas.getContext("experimental-webgl", {
+            alpha: true,
+            premultipliedAlpha: false,
+            preserveDrawingBuffer: false,
+          });
+
+        if (!gl) return null;
+
+        const program = createProgram(gl);
+        const buffer = gl.createBuffer();
+        const texture = gl.createTexture();
+        if (!program || !buffer || !texture) return null;
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.useProgram(program);
+
+        const positionLocation = gl.getAttribLocation(program, "a_position");
+        const textureLocation = gl.getUniformLocation(program, "u_texture");
+        if (positionLocation < 0 || !textureLocation) return null;
+
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform1i(textureLocation, 0);
+
+        return {
+          draw(video) {
+            try {
+              gl.activeTexture(gl.TEXTURE0);
+              gl.bindTexture(gl.TEXTURE_2D, texture);
+              gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+              gl.clearColor(0, 0, 0, 0);
+              gl.clear(gl.COLOR_BUFFER_BIT);
+              gl.drawArrays(gl.TRIANGLES, 0, 6);
+              return gl.getError();
+            } catch (_err) {
+              return -1;
+            }
+          },
+        };
+      }
+
+      function stopWebGLPreview() {
+        if (previewState.animationFrame) cancelAnimationFrame(previewState.animationFrame);
+        if (previewState.video) {
+          try {
+            previewState.video.pause();
+          } catch (_err) {
+            // Ignore preview cleanup failures.
+          }
+        }
+        if (previewState.blobUrl) revokeBlobUrl(previewState.blobUrl);
+        previewState = {
+          animationFrame: 0,
+          blobUrl: null,
+          renderer: null,
+          video: null,
+        };
+      }
+
+      async function startWebGLPreview() {
+        stopWebGLPreview();
+        $("preview-status").textContent = "loading";
+
+        try {
+          const previewVideo = createProbeVideoElement({ loop: true });
+          previewState.video = previewVideo.video;
+          previewState.blobUrl = previewVideo.blobUrl;
+          await waitForVideoLoaded(previewVideo.video);
+
+          const canvas = $("webgl-preview");
+          const renderer = createWebGLPreviewRenderer(canvas);
+          if (!renderer) {
+            $("preview-status").textContent = "webgl unavailable";
+            return;
+          }
+
+          previewState.renderer = renderer;
+
+          try {
+            await previewVideo.video.play();
+          } catch (_err) {
+            // Muted autoplay may still be blocked in some containers; drawing the loaded frame is still useful.
+          }
+
+          const draw = () => {
+            if (!previewState.video || !previewState.renderer) return;
+            const error = previewState.renderer.draw(previewState.video);
+            $("preview-status").textContent =
+              error === 0 ? `drawing t=${previewState.video.currentTime.toFixed(3)}` : `webgl error ${error}`;
+            previewState.animationFrame = requestAnimationFrame(draw);
+          };
+
+          draw();
+        } catch (err) {
+          $("preview-status").textContent = String(err && err.message ? err.message : err);
         }
       }
 
@@ -723,6 +908,8 @@
         if (!lastResult) return;
         await navigator.clipboard.writeText(JSON.stringify(lastResult, null, 2));
       });
+      $("preview-run").addEventListener("click", startWebGLPreview);
+      startWebGLPreview();
       runProbe();
     </script>
   </body>
