@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WebM VP9 Alpha Probe</title>
+    <title>Project Strict WebM Alpha Probe</title>
     <style>
       :root {
         color-scheme: dark;
@@ -30,7 +30,6 @@
       h1 {
         margin: 0 0 12px;
         font-size: 24px;
-        font-weight: 700;
       }
 
       .status {
@@ -55,14 +54,8 @@
         background: #654c14;
       }
 
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 14px;
-        margin-top: 18px;
-      }
-
       section {
+        margin-top: 16px;
         border: 1px solid #2e3b46;
         border-radius: 8px;
         padding: 14px;
@@ -74,35 +67,11 @@
         font-size: 15px;
       }
 
-      .checker {
-        width: 128px;
-        height: 128px;
-        background:
-          linear-gradient(45deg, #3b4650 25%, transparent 25%),
-          linear-gradient(-45deg, #3b4650 25%, transparent 25%),
-          linear-gradient(45deg, transparent 75%, #3b4650 75%),
-          linear-gradient(-45deg, transparent 75%, #3b4650 75%);
-        background-color: #111820;
-        background-position:
-          0 0,
-          0 8px,
-          8px -8px,
-          -8px 0;
-        background-size: 16px 16px;
-      }
-
-      video,
-      canvas {
-        width: 128px;
-        height: 128px;
-        border: 1px solid #415160;
-      }
-
       dl {
         display: grid;
-        grid-template-columns: minmax(112px, auto) 1fr;
+        grid-template-columns: minmax(132px, auto) 1fr;
         gap: 6px 10px;
-        margin: 10px 0 0;
+        margin: 0;
         font-size: 13px;
       }
 
@@ -116,7 +85,7 @@
       }
 
       pre {
-        min-height: 180px;
+        min-height: 220px;
         padding: 12px;
         overflow: auto;
         border-radius: 8px;
@@ -128,7 +97,7 @@
 
       button {
         min-height: 36px;
-        margin-top: 14px;
+        margin: 14px 8px 0 0;
         padding: 0 14px;
         border: 0;
         border-radius: 6px;
@@ -140,31 +109,24 @@
   </head>
   <body>
     <main>
-      <h1>WebM VP9 Alpha Probe</h1>
-      <div id="status" class="status">Waiting</div>
+      <h1>Project Strict WebM Alpha Probe</h1>
+      <div id="status" class="status warn">Waiting</div>
 
-      <div class="grid">
-        <section>
-          <h2>Video Element</h2>
-          <div class="checker">
-            <video id="video" muted playsinline preload="auto"></video>
-          </div>
-        </section>
-
-        <section>
-          <h2>Canvas 2D</h2>
-          <div class="checker">
-            <canvas id="canvas2d" width="64" height="64"></canvas>
-          </div>
-        </section>
-
-        <section>
-          <h2>WebGL</h2>
-          <div class="checker">
-            <canvas id="webgl" width="64" height="64"></canvas>
-          </div>
-        </section>
-      </div>
+      <section>
+        <h2>Strict Rules</h2>
+        <dl>
+          <dt>OS gate</dt>
+          <dd>Android only</dd>
+          <dt>timeout</dt>
+          <dd>1500ms</dd>
+          <dt>video event</dt>
+          <dd>loadeddata</dd>
+          <dt>frame wait</dt>
+          <dd>none</dd>
+          <dt>verification</dt>
+          <dd>WebGL texImage2D(video) + readPixels alpha check</dd>
+        </dl>
+      </section>
 
       <section>
         <h2>Environment</h2>
@@ -180,18 +142,19 @@
 
     <script>
       const PROBE_SIZE = 64;
-      const WEBM_ALPHA_BASE64 =
+      const PROBE_TIMEOUT_MS = 1500;
+      const WEBM_ALPHA_MIME_TYPE = "video/webm";
+      const WEBM_ALPHA_PROBE_BASE64 =
         "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAAANdEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEnTbuMU6uEHFO7a1OsggNH7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjIuMy4xMDBXQYxMYXZmNjIuMy4xMDBEiYhAj0AAAAAAABZUrmvMrgEAAAAAAABD14EBc8WIlVjCI5gwStOcgQAitZyDdW5kiIEAhoVWX1ZQOYOBASPjg4QdzWUA4JSwgUC6gUCagQJTwIEBVbCEVbmBARJUw2dAk3Nzn2PAgGfImUWjh0VOQ09ERVJEh4xMYXZmNjIuMy4xMDBzc+5jwItjxYiVWMIjmDBK02fIpUWjh0VOQ09ERVJEh5hMYXZjNjIuMTEuMTAwIGxpYnZweC12cDlnyJFFo4pBTFBIQV9NT0RFRIeBMWfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDEuMDAwMDAwMDAwAB9DtnVBgeeBAKBBSaFBAIEAAACCSYNCAAPwA/YAOCQcGAAAAfB/N9HX0jv/35vYvYt4/W+s/H8LRfbvIvI/38m2jAAAeLby2NnCtf5ID05IxhPMTtEQKe5TOmA2uQ7oxV9+MtaT7n73ue4E/Fz1MhjgJHPbdq/SrgTyVKBnuzIYt6ffv+micgTHnxNp51beEL93Kd/zb697ik7C/3Tp8Nv1Hlm9pWEEP4FOtD4NgoUctJ+3rWvad0WsylD1EB+zoQK8sZyj3M11eOvS2mjfRSv/59nSSkZzuUwmetQZ9YlCfU7a3T+Ou2gTLu/w92djATZlGApr1Y9PlubQcZQqBrK5ST0Dwv7hte8Fecyv8yB1ocOmwe6BAaW8gkmDQgAD8AP2ADgkHBgAAACAfY/47KkAAAB4tnD6D7+374BWTHwfg3T7msev7YybQb0/BQ9CA6k2k4DwoLChkoEB9ACGAECSnABAAAACAABUcHWhlaaT7oEBpY6GAECSnABAAAACAABUcPuC/gwcU7trkbuPs4EAt4r3gQHxggHA8IED";
 
       let lastResult = null;
-      let currentBlobUrl = "";
 
       const $ = (id) => document.getElementById(id);
 
       function matchValue(text, regexp) {
         try {
           return regexp.exec(text)?.[1] || "unknown";
-        } catch (error) {
+        } catch (_err) {
           return "unknown";
         }
       }
@@ -199,7 +162,7 @@
       function decodeValue(value) {
         try {
           return decodeURIComponent(value);
-        } catch (error) {
+        } catch (_err) {
           return value;
         }
       }
@@ -228,88 +191,105 @@
           .join("");
       }
 
+      function getProbeOs() {
+        try {
+          return /Android/i.test(navigator.userAgent || "") ? "android" : "unknown";
+        } catch (_err) {
+          return "unknown";
+        }
+      }
+
+      function revokeBlobUrl(blobUrl) {
+        try {
+          if (typeof URL !== "undefined" && typeof URL.revokeObjectURL === "function") {
+            URL.revokeObjectURL(blobUrl);
+          }
+        } catch (_err) {
+          // Ignore cleanup failures.
+        }
+      }
+
       function base64ToBlobUrl(base64, mimeType) {
+        if (
+          typeof atob !== "function" ||
+          typeof Blob === "undefined" ||
+          typeof URL === "undefined" ||
+          typeof URL.createObjectURL !== "function"
+        ) {
+          return null;
+        }
+
         const binary = atob(base64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i += 1) {
           bytes[i] = binary.charCodeAt(i);
         }
+
         return URL.createObjectURL(new Blob([bytes], { type: mimeType }));
       }
 
-      function waitForLoadedData(video) {
+      function waitForVideoLoaded(video) {
         return new Promise((resolve, reject) => {
-          const timeout = window.setTimeout(() => {
-            cleanup();
-            reject(new Error("timeout"));
-          }, 3000);
+          let settled = false;
+          let timeoutTimer;
 
           const cleanup = () => {
-            window.clearTimeout(timeout);
-            video.removeEventListener("loadeddata", onLoaded);
-            video.removeEventListener("error", onError);
-          };
-          const onLoaded = () => {
-            cleanup();
-            resolve();
-          };
-          const onError = () => {
-            cleanup();
-            reject(new Error("load-error"));
+            if (timeoutTimer) clearTimeout(timeoutTimer);
+            video.removeEventListener("loadeddata", handleLoaded);
+            video.removeEventListener("error", handleError);
           };
 
-          video.addEventListener("loadeddata", onLoaded, { once: true });
-          video.addEventListener("error", onError, { once: true });
+          const settle = (handler) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            handler();
+          };
+
+          const handleLoaded = () => settle(() => resolve());
+          const handleError = () => settle(() => reject(new Error("load-error")));
+
+          timeoutTimer = setTimeout(() => settle(() => reject(new Error("timeout"))), PROBE_TIMEOUT_MS);
+          video.addEventListener("loadeddata", handleLoaded, { once: true });
+          video.addEventListener("error", handleError, { once: true });
           video.load();
         });
       }
 
-      function summarizePixels(pixels) {
-        let minAlpha = 255;
-        let maxAlpha = 0;
-        let transparentCount = 0;
-        let opaqueCount = 0;
-        let partialCount = 0;
+      async function loadWebmProbeVideo() {
+        if (typeof document === "undefined") throw new Error("unsupported-api");
 
-        for (let i = 3; i < pixels.length; i += 4) {
-          const alpha = pixels[i];
-          minAlpha = Math.min(minAlpha, alpha);
-          maxAlpha = Math.max(maxAlpha, alpha);
-          if (alpha <= 16) transparentCount += 1;
-          else if (alpha >= 240) opaqueCount += 1;
-          else partialCount += 1;
+        const blobUrl = base64ToBlobUrl(WEBM_ALPHA_PROBE_BASE64, WEBM_ALPHA_MIME_TYPE);
+        if (!blobUrl) throw new Error("unsupported-api");
+
+        const video = document.createElement("video");
+        video.muted = true;
+        video.defaultMuted = true;
+        video.playsInline = true;
+        video.setAttribute("playsinline", "");
+        video.preload = "auto";
+        video.src = blobUrl;
+
+        try {
+          await waitForVideoLoaded(video);
+          return { video, blobUrl };
+        } catch (err) {
+          revokeBlobUrl(blobUrl);
+          throw err;
         }
-
-        return {
-          minAlpha,
-          maxAlpha,
-          transparentCount,
-          opaqueCount,
-          partialCount,
-          supported: transparentCount > 0 && opaqueCount > 0,
-        };
-      }
-
-      function drawCanvas2d(video) {
-        const canvas = $("canvas2d");
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        if (!ctx) return { result: "unsupported-api" };
-        ctx.clearRect(0, 0, PROBE_SIZE, PROBE_SIZE);
-        ctx.drawImage(video, 0, 0, PROBE_SIZE, PROBE_SIZE);
-        const pixels = ctx.getImageData(0, 0, PROBE_SIZE, PROBE_SIZE).data;
-        const summary = summarizePixels(pixels);
-        return { result: summary.supported ? "supported" : "no-alpha", ...summary };
       }
 
       function createShader(gl, type, source) {
         const shader = gl.createShader(type);
         if (!shader) return null;
+
         gl.shaderSource(shader, source);
         gl.compileShader(shader);
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
           gl.deleteShader(shader);
           return null;
         }
+
         return shader;
       }
 
@@ -320,6 +300,7 @@
           `
             attribute vec2 a_position;
             varying vec2 v_uv;
+
             void main() {
               v_uv = (a_position + 1.0) * 0.5;
               gl_Position = vec4(a_position, 0.0, 1.0);
@@ -333,15 +314,18 @@
             precision mediump float;
             varying vec2 v_uv;
             uniform sampler2D u_texture;
+
             void main() {
               gl_FragColor = texture2D(u_texture, v_uv);
             }
           `,
         );
+
         if (!vertexShader || !fragmentShader) return null;
 
         const program = gl.createProgram();
         if (!program) return null;
+
         gl.attachShader(program, vertexShader);
         gl.attachShader(program, fragmentShader);
         gl.linkProgram(program);
@@ -352,11 +336,31 @@
           gl.deleteProgram(program);
           return null;
         }
+
         return program;
       }
 
-      function drawWebGL(video) {
-        const canvas = $("webgl");
+      function hasTransparentAndOpaquePixels(pixels) {
+        let hasTransparentPixel = false;
+        let hasOpaquePixel = false;
+
+        for (let i = 3; i < pixels.length; i += 4) {
+          const alpha = pixels[i];
+          if (alpha <= 16) hasTransparentPixel = true;
+          if (alpha >= 240) hasOpaquePixel = true;
+          if (hasTransparentPixel && hasOpaquePixel) return true;
+        }
+
+        return false;
+      }
+
+      function verifyVideoAlphaWithWebGL(video) {
+        if (typeof document === "undefined") return "unsupported-api";
+
+        const canvas = document.createElement("canvas");
+        canvas.width = PROBE_SIZE;
+        canvas.height = PROBE_SIZE;
+
         const gl =
           canvas.getContext("webgl", {
             alpha: true,
@@ -368,13 +372,17 @@
             premultipliedAlpha: false,
             preserveDrawingBuffer: true,
           });
-        if (!gl) return { result: "unsupported-api" };
+
+        if (!gl) return "unsupported-api";
+
+        let loseContext = null;
 
         try {
+          loseContext = gl.getExtension("WEBGL_lose_context");
           const program = createProgram(gl);
           const buffer = gl.createBuffer();
           const texture = gl.createTexture();
-          if (!program || !buffer || !texture) return { result: "webgl-error", stage: "setup" };
+          if (!program || !buffer || !texture) return "webgl-error";
 
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
           gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
@@ -388,7 +396,7 @@
           gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
           gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-          if (gl.getError() !== gl.NO_ERROR) return { result: "webgl-error", stage: "texImage2D" };
+          if (gl.getError() !== gl.NO_ERROR) return "webgl-error";
 
           gl.viewport(0, 0, PROBE_SIZE, PROBE_SIZE);
           gl.clearColor(0, 0, 0, 0);
@@ -397,23 +405,62 @@
 
           const positionLocation = gl.getAttribLocation(program, "a_position");
           const textureLocation = gl.getUniformLocation(program, "u_texture");
-          if (positionLocation < 0 || !textureLocation) return { result: "webgl-error", stage: "locations" };
+          if (positionLocation < 0 || !textureLocation) return "webgl-error";
 
           gl.enableVertexAttribArray(positionLocation);
           gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
           gl.uniform1i(textureLocation, 0);
           gl.drawArrays(gl.TRIANGLES, 0, 6);
-          if (gl.getError() !== gl.NO_ERROR) return { result: "webgl-error", stage: "drawArrays" };
+          if (gl.getError() !== gl.NO_ERROR) return "webgl-error";
 
           const pixels = new Uint8Array(PROBE_SIZE * PROBE_SIZE * 4);
           gl.readPixels(0, 0, PROBE_SIZE, PROBE_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-          if (gl.getError() !== gl.NO_ERROR) return { result: "webgl-error", stage: "readPixels" };
+          if (gl.getError() !== gl.NO_ERROR) return "webgl-error";
 
-          const summary = summarizePixels(pixels);
-          return { result: summary.supported ? "supported" : "no-alpha", ...summary };
-        } catch (error) {
-          return { result: "webgl-error", message: String(error && error.message ? error.message : error) };
+          return hasTransparentAndOpaquePixels(pixels) ? "supported" : "no-alpha";
+        } catch (_err) {
+          return "webgl-error";
+        } finally {
+          try {
+            loseContext?.loseContext();
+          } catch (_err) {
+            // Ignore WebGL cleanup failures.
+          }
         }
+      }
+
+      async function probeAndroidWebmAlpha() {
+        let blobUrl = null;
+
+        try {
+          const probeVideo = await loadWebmProbeVideo();
+          blobUrl = probeVideo.blobUrl;
+          return verifyVideoAlphaWithWebGL(probeVideo.video);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "";
+          if (message === "unsupported-api") return "unsupported-api";
+          if (message === "timeout") return "timeout";
+          return "load-error";
+        } finally {
+          if (blobUrl) revokeBlobUrl(blobUrl);
+        }
+      }
+
+      async function reportNativeTransparentVideoSupport() {
+        const os = getProbeOs();
+        const payload = {
+          os,
+          targetFormat: os === "android" ? "webmAlpha" : "unknown",
+          targetSupport: os === "android" ? "skipped" : "unsupported-os",
+          webmAlphaSupport: "skipped",
+        };
+
+        if (os === "android") {
+          payload.webmAlphaSupport = await probeAndroidWebmAlpha();
+          payload.targetSupport = payload.webmAlphaSupport;
+        }
+
+        return payload;
       }
 
       function setStatus(result) {
@@ -422,61 +469,43 @@
         if (result === "supported") status.classList.add("ok");
         else if (result === "no-alpha") status.classList.add("bad");
         else status.classList.add("warn");
-        status.textContent = `WebGL: ${result}`;
+        status.textContent = result;
       }
 
       async function runProbe() {
-        $("status").className = "status warn";
-        $("status").textContent = "Running";
+        const startTime = Date.now();
         const env = getEnvironment();
         renderEnvironment(env);
-
-        if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
-        currentBlobUrl = base64ToBlobUrl(WEBM_ALPHA_BASE64, "video/webm");
-
-        const video = $("video");
-        video.muted = true;
-        video.defaultMuted = true;
-        video.playsInline = true;
-        video.src = currentBlobUrl;
+        setStatus("running");
 
         try {
-          await waitForLoadedData(video);
-          if (typeof video.requestVideoFrameCallback === "function") {
-            await new Promise((resolve) => {
-              const timer = window.setTimeout(resolve, 120);
-              video.requestVideoFrameCallback(() => {
-                window.clearTimeout(timer);
-                resolve();
-              });
-            });
-          }
-
-          const canvas2d = drawCanvas2d(video);
-          const webgl = drawWebGL(video);
+          const support = await reportNativeTransparentVideoSupport();
           const result = {
+            mode: "project-strict",
             time: new Date().toISOString(),
+            durationMs: Date.now() - startTime,
             env,
-            video: {
-              readyState: video.readyState,
-              videoWidth: video.videoWidth,
-              videoHeight: video.videoHeight,
-              duration: video.duration,
+            support,
+            monitorFields: {
+              c1: support.os,
+              c2: support.targetFormat,
+              c3: support.targetSupport,
+              c4: support.webmAlphaSupport,
             },
-            canvas2d,
-            webgl,
           };
           lastResult = result;
-          setStatus(webgl.result);
+          setStatus(support.targetSupport);
           $("output").textContent = JSON.stringify(result, null, 2);
         } catch (error) {
           const result = {
+            mode: "project-strict",
             time: new Date().toISOString(),
+            durationMs: Date.now() - startTime,
             env,
             error: String(error && error.message ? error.message : error),
           };
           lastResult = result;
-          setStatus(result.error);
+          setStatus("js-error");
           $("output").textContent = JSON.stringify(result, null, 2);
         }
       }
